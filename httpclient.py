@@ -1,3 +1,20 @@
+# Copyright 2023 Luofan Peng
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+#     http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+
+
 #!/usr/bin/env python3
 # coding: utf-8
 # Copyright 2016 Abram Hindle, https://github.com/tywtyw2002, and https://github.com/treedust
@@ -24,6 +41,8 @@ import re
 # you may use urllib to encode data appropriately
 import urllib.parse
 
+
+
 def help():
     print("httpclient.py [GET/POST] [URL]\n")
 
@@ -41,13 +60,21 @@ class HTTPClient(object):
         return None
 
     def get_code(self, data):
-        return None
+        try:
+            return int(data.split(' ')[1])
+        except:
+            return 500
 
     def get_headers(self,data):
-        return None
+        headers_part = data.split('\r\n\r\n')[0]
+        headers = {}
+        for line in headers_part.split('\r\n')[1:]:
+            key, value = line.split(": ", 1)
+            headers[key] = value
+        return headers
 
     def get_body(self, data):
-        return None
+        return data.split('\r\n\r\n', 1)[1]
     
     def sendall(self, data):
         self.socket.sendall(data.encode('utf-8'))
@@ -68,14 +95,58 @@ class HTTPClient(object):
         return buffer.decode('utf-8')
 
     def GET(self, url, args=None):
-        code = 500
-        body = ""
-        return HTTPResponse(code, body)
+        try:
+            parsed_url = urllib.parse.urlparse(url)
+            host = parsed_url.hostname
+            port = parsed_url.port if parsed_url.port else 80
+            path = parsed_url.path if parsed_url.path else '/'
+
+            self.connect(host, port)
+            request = f"GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n"
+            self.sendall(request)
+
+            response = self.recvall(self.socket)
+
+            if not response.startswith("HTTP/"):
+                raise ValueError("Invalid HTTP Response")
+
+            code = self.get_code(response)
+            body = self.get_body(response)
+
+            self.close()
+            return HTTPResponse(code, body)
+        except Exception as e:
+            print(f"GET request failed with error: {e}")
+            return HTTPResponse(500, "Internal Client Error")
+
 
     def POST(self, url, args=None):
-        code = 500
-        body = ""
-        return HTTPResponse(code, body)
+        try:
+            parsed_url = urllib.parse.urlparse(url)
+            host = parsed_url.hostname
+            port = parsed_url.port if parsed_url.port else 80
+            path = parsed_url.path if parsed_url.path else '/'
+
+            body = urllib.parse.urlencode(args) if args else ""
+            content_length = len(body)
+
+            self.connect(host, port)
+            request = f"POST {path} HTTP/1.1\r\nHost: {host}\r\nContent-Length: {content_length}\r\nContent-Type: application/x-www-form-urlencoded\r\nConnection: close\r\n\r\n{body}"
+            self.sendall(request)
+
+            response = self.recvall(self.socket)
+
+            if not response.startswith("HTTP/"):
+                raise ValueError("Invalid HTTP Response")
+
+            code = self.get_code(response)
+            body = self.get_body(response)
+
+            self.close()
+            return HTTPResponse(code, body)
+        except Exception as e:
+            print(f"POST request failed with error: {e}")
+            return HTTPResponse(500, "Internal Client Error")
 
     def command(self, url, command="GET", args=None):
         if (command == "POST"):
